@@ -1,0 +1,25 @@
+{
+  "name": "service-backend-persons",
+  "version": "1.0.0",
+  "description": "Service-backend-persons is a API REST that allows to any user to do CRUD queries about a person.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@gitlab.com/acayulao/service-backend-persons.git"
+  },
+  "keywords": [
+    "API",
+    "REST",
+    "microservice",
+    "person"
+  ],
+  "author": "Antonio Cayulao",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://gitlab.com/acayulao/service-backend-persons/issues"
+  },
+  "homepage": "https://gitlab.com/acayulao/service-backend-persons#readme"
+}
