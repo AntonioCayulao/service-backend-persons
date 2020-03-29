@@ -1,0 +1,11 @@
+.gitlab/
+dev_local/
+dist/
+node_modules/
+
+.dockerignore
+*.env
+.gitignore
+.gitlab-ci.yaml
+Dockerfile
+package-lock.json

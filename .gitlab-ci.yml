@@ -50,175 +50,167 @@ variables:
   CANARY_ENABLED: 1
 
 stages:
-    - pretest
-#   - build
-#   - test
-#   - deploy  # dummy stage to follow the template guidelines
-#   - review
-#   - dast
-#   - staging
-#   - canary
-#   - production
-#   - incremental rollout 10%
-#   - incremental rollout 25%
-#   - incremental rollout 50%
-#   - incremental rollout 100%
-#   - cleanup
+  - pretest
+  - build
+  - test
+  - deploy  # dummy stage to follow the template guidelines
+  - review
+  - dast
+  - staging
+  - canary
+  - production
+  - incremental rollout 10%
+  - incremental rollout 25%
+  - incremental rollout 50%
+  - incremental rollout 100%
+  - cleanup
 
 local:
-    stage: pretest
-    script:
-      - ls
-      - cd test_with_postman
-      - newman run Persons.postman_collection.json -e 'people local.postman_environment.json' --reporters cli,html --reporter-html-export report.html
-      - ls
-    artifacts:
-      paths:
-        - test_with_postman/report.html
-    only:
-      - tags
+  stage: pretest
+  script:
+    - ls
+    - cd test_with_postman
+    - newman run Persons.postman_collection.json -e 'people local.postman_environment.json' --reporters cli,html --reporter-html-export report.html
+    - ls
+  artifacts:
+    paths:
+      - test_with_postman/report.html
+  only:
+    - tags
+    - branches
+  tags:
+    - local
+
+build:
+  stage: build
+  image: "registry.gitlab.com/gitlab-org/cluster-integration/auto-build-image/master:stable"
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+  services:
+    - docker:stable-dind
+  script:
+    - echo $CI_APPLICATION_REPOSITORY
+    - |
+      if [[ -z "$CI_COMMIT_TAG" ]]; then
+        export CI_APPLICATION_REPOSITORY=${CI_APPLICATION_REPOSITORY:-$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG}
+        export CI_APPLICATION_TAG=${CI_APPLICATION_TAG:-$CI_COMMIT_SHA}
+      else
+        export CI_APPLICATION_REPOSITORY=${CI_APPLICATION_REPOSITORY:-$CI_REGISTRY_IMAGE}
+        export CI_APPLICATION_TAG=${CI_APPLICATION_TAG:-$CI_COMMIT_TAG}
+      fi
+    - |
+      if ! docker info &>/dev/null; then
+        if [ -z "$DOCKER_HOST" ] && [ "$KUBERNETES_PORT" ]; then
+          export DOCKER_HOST='tcp://localhost:2375'
+        fi
+      fi
+    - |
+      if [[ -n "$CI_REGISTRY" && -n "$CI_REGISTRY_USER" ]]; then
+        echo "Logging to GitLab Container Registry with CI credentials..."
+        docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+      fi
+    - |
+      if [[ -f Dockerfile ]]; then
+        echo "Building Dockerfile-based application..."
+      else
+        echo "Building Heroku-based application using gliderlabs/herokuish docker image..."
+        erb -T - /build/Dockerfile.erb > Dockerfile
+      fi
+    - build_secret_args=''
+    - |
+      if [[ -n "$AUTO_DEVOPS_BUILD_IMAGE_FORWARDED_CI_VARIABLES" ]]; then
+        build_secret_file_path=/tmp/auto-devops-build-secrets
+        "$(dirname "$0")"/export-build-secrets > "$build_secret_file_path"
+        build_secret_args="--secret id=auto-devops-build-secrets,src=$build_secret_file_path"
+
+        echo 'Activating Docker BuildKit to forward CI variables with --secret'
+        export DOCKER_BUILDKIT=1
+      fi
+    - docker pull registry.gitlab.com/acayulao/service-backend-persons
+    - |
+      docker build \
+        $build_secret_args \
+        --build-arg BUILDPACK_URL="$BUILDPACK_URL" \
+        --build-arg HTTP_PROXY="$HTTP_PROXY" \
+        --build-arg http_proxy="$http_proxy" \
+        --build-arg HTTPS_PROXY="$HTTPS_PROXY" \
+        --build-arg https_proxy="$https_proxy" \
+        --build-arg FTP_PROXY="$FTP_PROXY" \
+        --build-arg ftp_proxy="$ftp_proxy" \
+        --build-arg NO_PROXY="$NO_PROXY" \
+        --build-arg no_proxy="$no_proxy" \
+        $AUTO_DEVOPS_BUILD_IMAGE_EXTRA_ARGS \
+        --cache-from registry.gitlab.com/acayulao/service-backend-persons \
+        --tag "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG" .
+    - docker tag "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG" "$CI_APPLICATION_REPOSITORY"
+    - docker push "$CI_APPLICATION_REPOSITORY"
+    - echo "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG"
+
+
+# Read more about this feature here: https://docs.gitlab.com/ee/user/application_security/container_scanning/
+container_scanning:
+  stage: test
+  image:
+    name: registry.gitlab.com/gitlab-org/security-products/analyzers/klar:$CS_MAJOR_VERSION
+    entrypoint: [""]
+  variables:
+    CS_MAJOR_VERSION: 2
+    # By default, use the latest clair vulnerabilities database, however, allow it to be overridden here
+    # with a specific version to provide consistency for integration testing purposes
+    CLAIR_DB_IMAGE_TAG: latest
+    # Override this variable in your `.gitlab-ci.yml` file and set it to `fetch` if you want to provide a `clair-whitelist.yaml` file.
+    # See https://docs.gitlab.com/ee/user/application_security/container_scanning/index.html#overriding-the-container-scanning-template
+    # for details
+    GIT_STRATEGY: none
+  allow_failure: true
+  services:
+    - name: arminc/clair-db:$CLAIR_DB_IMAGE_TAG
+      alias: clair-vulnerabilities-db
+  script:
+    # the kubernetes executor currently ignores the Docker image entrypoint value, so the start.sh script must
+    # be explicitly executed here in order for this to work with both the kubernetes and docker executors
+    # see this issue for more details https://gitlab.com/gitlab-org/gitlab-runner/issues/4125
+    - /container-scanner/start.sh
+  artifacts:
+    reports:
+      container_scanning: gl-container-scanning-report.json
+  dependencies: []
+
+
+# Read more about this feature here: https://docs.gitlab.com/ee/user/application_security/license_compliance/
+#
+# Configure the scanning tool through the environment variables.
+# List of the variables: https://gitlab.com/gitlab-org/security-products/license-management#settings
+# How to set: https://docs.gitlab.com/ee/ci/yaml/#variables
+
+license_scanning:
+  stage: test
+  image:
+    name: "registry.gitlab.com/gitlab-org/security-products/license-management:$CI_SERVER_VERSION_MAJOR-$CI_SERVER_VERSION_MINOR-stable"
+    entrypoint: [""]
+  variables:
+    LICENSE_MANAGEMENT_SETUP_CMD: ''
+    SETUP_CMD: $LICENSE_MANAGEMENT_SETUP_CMD
+  allow_failure: true
+  script:
+    - /run.sh analyze .
+  after_script:
+    - mv gl-license-management-report.json gl-license-scanning-report.json
+  artifacts:
+    reports:
+      license_scanning: gl-license-scanning-report.json
+  dependencies: []
+  only:
+    refs:
       - branches
-    tags:
-      - local
 
-# build:
-#   stage: build
-#   image: "registry.gitlab.com/gitlab-org/cluster-integration/auto-build-image/master:stable"
-#   variables:
-#     DOCKER_TLS_CERTDIR: ""
-#   services:
-#     - docker:stable-dind
-#   script:
-#     - echo $CI_APPLICATION_REPOSITORY
-#     - |
-#       if [[ -z "$CI_COMMIT_TAG" ]]; then
-#         export CI_APPLICATION_REPOSITORY=${CI_APPLICATION_REPOSITORY:-$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG}
-#         export CI_APPLICATION_TAG=${CI_APPLICATION_TAG:-$CI_COMMIT_SHA}
-#       else
-#         export CI_APPLICATION_REPOSITORY=${CI_APPLICATION_REPOSITORY:-$CI_REGISTRY_IMAGE}
-#         export CI_APPLICATION_TAG=${CI_APPLICATION_TAG:-$CI_COMMIT_TAG}
-#       fi
-#     - |
-#       if ! docker info &>/dev/null; then
-#         if [ -z "$DOCKER_HOST" ] && [ "$KUBERNETES_PORT" ]; then
-#           export DOCKER_HOST='tcp://localhost:2375'
-#         fi
-#       fi
-#     - |
-#       if [[ -n "$CI_REGISTRY" && -n "$CI_REGISTRY_USER" ]]; then
-#         echo "Logging to GitLab Container Registry with CI credentials..."
-#         docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-#       fi
-#     - |
-#       if [[ -f Dockerfile ]]; then
-#         echo "Building Dockerfile-based application..."
-#       else
-#         echo "Building Heroku-based application using gliderlabs/herokuish docker image..."
-#         erb -T - /build/Dockerfile.erb > Dockerfile
-#       fi
-#     - build_secret_args=''
-#     - |
-#       if [[ -n "$AUTO_DEVOPS_BUILD_IMAGE_FORWARDED_CI_VARIABLES" ]]; then
-#         build_secret_file_path=/tmp/auto-devops-build-secrets
-#         "$(dirname "$0")"/export-build-secrets > "$build_secret_file_path"
-#         build_secret_args="--secret id=auto-devops-build-secrets,src=$build_secret_file_path"
+# Read more about this feature here: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/
+#
+# Configure the scanning tool through the environment variables.
+# List of the variables: https://gitlab.com/gitlab-org/security-products/dependency-scanning#settings
+# How to set: https://docs.gitlab.com/ee/ci/yaml/#variables
 
-#         echo 'Activating Docker BuildKit to forward CI variables with --secret'
-#         export DOCKER_BUILDKIT=1
-#       fi
-#     - docker pull registry.gitlab.com/we-techs/infra-tools/tools-to-manage
-#     # - docker pull "$CI_APPLICATION_REPOSITORY"
-#     - |
-#       docker build \
-#         $build_secret_args \
-#         --build-arg BUILDPACK_URL="$BUILDPACK_URL" \
-#         --build-arg HTTP_PROXY="$HTTP_PROXY" \
-#         --build-arg http_proxy="$http_proxy" \
-#         --build-arg HTTPS_PROXY="$HTTPS_PROXY" \
-#         --build-arg https_proxy="$https_proxy" \
-#         --build-arg FTP_PROXY="$FTP_PROXY" \
-#         --build-arg ftp_proxy="$ftp_proxy" \
-#         --build-arg NO_PROXY="$NO_PROXY" \
-#         --build-arg no_proxy="$no_proxy" \
-#         $AUTO_DEVOPS_BUILD_IMAGE_EXTRA_ARGS \
-#         --cache-from registry.gitlab.com/we-techs/infra-tools/tools-to-manage \
-#         --tag "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG" .
-#     - docker tag "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG" "$CI_APPLICATION_REPOSITORY"
-#     - docker push "$CI_APPLICATION_REPOSITORY"
-#     - echo "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG"
-
-
-# # Read more about this feature here: https://docs.gitlab.com/ee/user/application_security/container_scanning/
-# container_scanning:
-#   stage: test
-#   image:
-#     name: registry.gitlab.com/gitlab-org/security-products/analyzers/klar:$CS_MAJOR_VERSION
-#     entrypoint: [""]
-#   variables:
-#     CS_MAJOR_VERSION: 2
-#     # By default, use the latest clair vulnerabilities database, however, allow it to be overridden here
-#     # with a specific version to provide consistency for integration testing purposes
-#     CLAIR_DB_IMAGE_TAG: latest
-#     # Override this variable in your `.gitlab-ci.yml` file and set it to `fetch` if you want to provide a `clair-whitelist.yaml` file.
-#     # See https://docs.gitlab.com/ee/user/application_security/container_scanning/index.html#overriding-the-container-scanning-template
-#     # for details
-#     GIT_STRATEGY: none
-#   allow_failure: true
-#   services:
-#     - name: arminc/clair-db:$CLAIR_DB_IMAGE_TAG
-#       alias: clair-vulnerabilities-db
-#   script:
-#     # the kubernetes executor currently ignores the Docker image entrypoint value, so the start.sh script must
-#     # be explicitly executed here in order for this to work with both the kubernetes and docker executors
-#     # see this issue for more details https://gitlab.com/gitlab-org/gitlab-runner/issues/4125
-#     - /container-scanner/start.sh
-#     - ls
-#     - cat gl-container-scanning-report.json
-#   artifacts:
-#     reports:
-#       container_scanning: gl-container-scanning-report.json
-#   dependencies: []
-#   # only:
-#   #   variables:
-#   #     - $GITLAB_FEATURES =~ /\bcontainer_scanning\b/
-
-# # Read more about this feature here: https://docs.gitlab.com/ee/user/application_security/license_compliance/
-# #
-# # Configure the scanning tool through the environment variables.
-# # List of the variables: https://gitlab.com/gitlab-org/security-products/license-management#settings
-# # How to set: https://docs.gitlab.com/ee/ci/yaml/#variables
-
-# variables:
-#   LICENSE_MANAGEMENT_SETUP_CMD: ''  # If needed, specify a command to setup your environment with a custom package manager.
-
-# license_scanning:
-#   stage: test
-#   image:
-#     name: "registry.gitlab.com/gitlab-org/security-products/license-management:$CI_SERVER_VERSION_MAJOR-$CI_SERVER_VERSION_MINOR-stable"
-#     entrypoint: [""]
-#   variables:
-#     SETUP_CMD: $LICENSE_MANAGEMENT_SETUP_CMD
-#   allow_failure: true
-#   script:
-#     - /run.sh analyze .
-#   after_script:
-#     - mv gl-license-management-report.json gl-license-scanning-report.json
-#     - cat gl-license-scanning-report.json
-#   artifacts:
-#     reports:
-#       license_scanning: gl-license-scanning-report.json
-#   dependencies: []
-#   only:
-#     refs:
-#       - branches
-
-# # Read more about this feature here: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/
-# #
-# # Configure the scanning tool through the environment variables.
-# # List of the variables: https://gitlab.com/gitlab-org/security-products/dependency-scanning#settings
-# # How to set: https://docs.gitlab.com/ee/ci/yaml/#variables
-
-# # No compatible analyzer can be found
+# No compatible analyzer can be found
 
 # .auto-deploy:
 #   image: "registry.gitlab.com/gitlab-org/cluster-integration/auto-deploy-image:v0.12.1"
@@ -481,7 +473,7 @@ local:
 # include:
 #   # - template: Jobs/Build.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Build.gitlab-ci.yml
 #   # - template: Jobs/Test.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Test.gitlab-ci.yml
-#   # - template: Jobs/Code-Quality.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Code-Quality.gitlab-ci.yml
+  # - template: Jobs/Code-Quality.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Code-Quality.gitlab-ci.yml
 #   # - template: Jobs/Deploy.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Deploy.gitlab-ci.yml
 #   # - template: Jobs/DAST-Default-Branch-Deploy.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/DAST-Default-Branch-Deploy.gitlab-ci.yml
 #   # - template: Jobs/Browser-Performance-Testing.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Browser-Performance-Testing.gitlab-ci.yml
@@ -489,4 +481,4 @@ local:
 #   # - template: Security/Container-Scanning.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Security/Container-Scanning.gitlab-ci.yml
 #   # - template: Security/Dependency-Scanning.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Security/Dependency-Scanning.gitlab-ci.yml
 #   # - template: Security/License-Management.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Security/License-Management.gitlab-ci.yml
-#   # - template: Security/SAST.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Security/SAST.gitlab-ci.yml
+  # - template: Security/SAST.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Security/SAST.gitlab-ci.yml
