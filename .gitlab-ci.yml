@@ -171,8 +171,6 @@ container_scanning:
     # be explicitly executed here in order for this to work with both the kubernetes and docker executors
     # see this issue for more details https://gitlab.com/gitlab-org/gitlab-runner/issues/4125
     - /container-scanner/start.sh
-    - ls
-    - cat gl-container-scanning-report.json
   artifacts:
     reports:
       container_scanning: gl-container-scanning-report.json
@@ -198,7 +196,6 @@ license_scanning:
     - /run.sh analyze .
   after_script:
     - mv gl-license-management-report.json gl-license-scanning-report.json
-    - cat gl-license-scanning-report.json
   artifacts:
     reports:
       license_scanning: gl-license-scanning-report.json
