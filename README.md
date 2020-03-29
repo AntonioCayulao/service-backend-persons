@@ -71,7 +71,8 @@ You can do a manual test with tools like Postman. The files are inside the folde
 You also can run all the unit test with:
 ```bash
 cd path/to/service/service-backend-persons/test_with_postman
-newman ...
+newman run Persons.postman_collection.json -e 'people local.postman_environment.json' \
+--reporters cli,html --reporter-html-export report.html
 ```
 
 # Contributing to this project and the License <a name="contributinglicense"></a>

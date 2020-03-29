@@ -1,0 +1,493 @@
+# This file is a template, and might need editing before it works on your project.
+# Auto DevOps
+# This CI/CD configuration provides a standard pipeline for
+# * building a Docker image (using a buildpack if necessary),
+# * storing the image in the container registry,
+# * running tests from a buildpack,
+# * running code quality analysis,
+# * creating a review app for each topic branch,
+# * and continuous deployment to production
+#
+# Test jobs may be disabled by setting environment variables:
+# * test: TEST_DISABLED
+# * code_quality: CODE_QUALITY_DISABLED
+# * license_management: LICENSE_MANAGEMENT_DISABLED
+# * performance: PERFORMANCE_DISABLED
+# * sast: SAST_DISABLED
+# * dependency_scanning: DEPENDENCY_SCANNING_DISABLED
+# * container_scanning: CONTAINER_SCANNING_DISABLED
+# * dast: DAST_DISABLED
+# * review: REVIEW_DISABLED
+# * stop_review: REVIEW_DISABLED
+#
+# In order to deploy, you must have a Kubernetes cluster configured either
+# via a project integration, or via group/project variables.
+# KUBE_INGRESS_BASE_DOMAIN must also be set on the cluster settings,
+# as a variable at the group or project level, or manually added below.
+#
+# Continuous deployment to production is enabled by default.
+# If you want to deploy to staging first, set STAGING_ENABLED environment variable.
+# If you want to enable incremental rollout, either manual or time based,
+# set INCREMENTAL_ROLLOUT_MODE environment variable to "manual" or "timed".
+# If you want to use canary deployments, set CANARY_ENABLED environment variable.
+#
+# If Auto DevOps fails to detect the proper buildpack, or if you want to
+# specify a custom buildpack, set a project variable `BUILDPACK_URL` to the
+# repository URL of the buildpack.
+# e.g. BUILDPACK_URL=https://github.com/heroku/heroku-buildpack-ruby.git#v142
+# If you need multiple buildpacks, add a file to your project called
+# `.buildpacks` that contains the URLs, one on each line, in order.
+# Note: Auto CI does not work with multiple buildpacks yet
+
+image: alpine:latest
+
+variables:
+  # KUBE_INGRESS_BASE_DOMAIN is the application deployment domain and should be set as a variable at the group or project level.
+  # KUBE_INGRESS_BASE_DOMAIN: domain.example.com
+
+  DOCKER_DRIVER: overlay2
+
+  CANARY_ENABLED: 1
+
+stages:
+    - pretest
+#   - build
+#   - test
+#   - deploy  # dummy stage to follow the template guidelines
+#   - review
+#   - dast
+#   - staging
+#   - canary
+#   - production
+#   - incremental rollout 10%
+#   - incremental rollout 25%
+#   - incremental rollout 50%
+#   - incremental rollout 100%
+#   - cleanup
+
+local:
+    stage: pretest
+    script:
+      - ls
+      - cd test_with_postman
+      - newman run Persons.postman_collection.json -e 'people local.postman_environment.json' \
+        --reporters cli,html --reporter-html-export report.html
+      - ls
+    artifacts:
+      paths:
+        - report.html
+    only:
+      - tags
+      - branches
+    tags:
+      - local
+
+# build:
+#   stage: build
+#   image: "registry.gitlab.com/gitlab-org/cluster-integration/auto-build-image/master:stable"
+#   variables:
+#     DOCKER_TLS_CERTDIR: ""
+#   services:
+#     - docker:stable-dind
+#   script:
+#     - echo $CI_APPLICATION_REPOSITORY
+#     - |
+#       if [[ -z "$CI_COMMIT_TAG" ]]; then
+#         export CI_APPLICATION_REPOSITORY=${CI_APPLICATION_REPOSITORY:-$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG}
+#         export CI_APPLICATION_TAG=${CI_APPLICATION_TAG:-$CI_COMMIT_SHA}
+#       else
+#         export CI_APPLICATION_REPOSITORY=${CI_APPLICATION_REPOSITORY:-$CI_REGISTRY_IMAGE}
+#         export CI_APPLICATION_TAG=${CI_APPLICATION_TAG:-$CI_COMMIT_TAG}
+#       fi
+#     - |
+#       if ! docker info &>/dev/null; then
+#         if [ -z "$DOCKER_HOST" ] && [ "$KUBERNETES_PORT" ]; then
+#           export DOCKER_HOST='tcp://localhost:2375'
+#         fi
+#       fi
+#     - |
+#       if [[ -n "$CI_REGISTRY" && -n "$CI_REGISTRY_USER" ]]; then
+#         echo "Logging to GitLab Container Registry with CI credentials..."
+#         docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+#       fi
+#     - |
+#       if [[ -f Dockerfile ]]; then
+#         echo "Building Dockerfile-based application..."
+#       else
+#         echo "Building Heroku-based application using gliderlabs/herokuish docker image..."
+#         erb -T - /build/Dockerfile.erb > Dockerfile
+#       fi
+#     - build_secret_args=''
+#     - |
+#       if [[ -n "$AUTO_DEVOPS_BUILD_IMAGE_FORWARDED_CI_VARIABLES" ]]; then
+#         build_secret_file_path=/tmp/auto-devops-build-secrets
+#         "$(dirname "$0")"/export-build-secrets > "$build_secret_file_path"
+#         build_secret_args="--secret id=auto-devops-build-secrets,src=$build_secret_file_path"
+
+#         echo 'Activating Docker BuildKit to forward CI variables with --secret'
+#         export DOCKER_BUILDKIT=1
+#       fi
+#     - docker pull registry.gitlab.com/we-techs/infra-tools/tools-to-manage
+#     # - docker pull "$CI_APPLICATION_REPOSITORY"
+#     - |
+#       docker build \
+#         $build_secret_args \
+#         --build-arg BUILDPACK_URL="$BUILDPACK_URL" \
+#         --build-arg HTTP_PROXY="$HTTP_PROXY" \
+#         --build-arg http_proxy="$http_proxy" \
+#         --build-arg HTTPS_PROXY="$HTTPS_PROXY" \
+#         --build-arg https_proxy="$https_proxy" \
+#         --build-arg FTP_PROXY="$FTP_PROXY" \
+#         --build-arg ftp_proxy="$ftp_proxy" \
+#         --build-arg NO_PROXY="$NO_PROXY" \
+#         --build-arg no_proxy="$no_proxy" \
+#         $AUTO_DEVOPS_BUILD_IMAGE_EXTRA_ARGS \
+#         --cache-from registry.gitlab.com/we-techs/infra-tools/tools-to-manage \
+#         --tag "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG" .
+#     - docker tag "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG" "$CI_APPLICATION_REPOSITORY"
+#     - docker push "$CI_APPLICATION_REPOSITORY"
+#     - echo "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG"
+
+
+# # Read more about this feature here: https://docs.gitlab.com/ee/user/application_security/container_scanning/
+# container_scanning:
+#   stage: test
+#   image:
+#     name: registry.gitlab.com/gitlab-org/security-products/analyzers/klar:$CS_MAJOR_VERSION
+#     entrypoint: [""]
+#   variables:
+#     CS_MAJOR_VERSION: 2
+#     # By default, use the latest clair vulnerabilities database, however, allow it to be overridden here
+#     # with a specific version to provide consistency for integration testing purposes
+#     CLAIR_DB_IMAGE_TAG: latest
+#     # Override this variable in your `.gitlab-ci.yml` file and set it to `fetch` if you want to provide a `clair-whitelist.yaml` file.
+#     # See https://docs.gitlab.com/ee/user/application_security/container_scanning/index.html#overriding-the-container-scanning-template
+#     # for details
+#     GIT_STRATEGY: none
+#   allow_failure: true
+#   services:
+#     - name: arminc/clair-db:$CLAIR_DB_IMAGE_TAG
+#       alias: clair-vulnerabilities-db
+#   script:
+#     # the kubernetes executor currently ignores the Docker image entrypoint value, so the start.sh script must
+#     # be explicitly executed here in order for this to work with both the kubernetes and docker executors
+#     # see this issue for more details https://gitlab.com/gitlab-org/gitlab-runner/issues/4125
+#     - /container-scanner/start.sh
+#     - ls
+#     - cat gl-container-scanning-report.json
+#   artifacts:
+#     reports:
+#       container_scanning: gl-container-scanning-report.json
+#   dependencies: []
+#   # only:
+#   #   variables:
+#   #     - $GITLAB_FEATURES =~ /\bcontainer_scanning\b/
+
+# # Read more about this feature here: https://docs.gitlab.com/ee/user/application_security/license_compliance/
+# #
+# # Configure the scanning tool through the environment variables.
+# # List of the variables: https://gitlab.com/gitlab-org/security-products/license-management#settings
+# # How to set: https://docs.gitlab.com/ee/ci/yaml/#variables
+
+# variables:
+#   LICENSE_MANAGEMENT_SETUP_CMD: ''  # If needed, specify a command to setup your environment with a custom package manager.
+
+# license_scanning:
+#   stage: test
+#   image:
+#     name: "registry.gitlab.com/gitlab-org/security-products/license-management:$CI_SERVER_VERSION_MAJOR-$CI_SERVER_VERSION_MINOR-stable"
+#     entrypoint: [""]
+#   variables:
+#     SETUP_CMD: $LICENSE_MANAGEMENT_SETUP_CMD
+#   allow_failure: true
+#   script:
+#     - /run.sh analyze .
+#   after_script:
+#     - mv gl-license-management-report.json gl-license-scanning-report.json
+#     - cat gl-license-scanning-report.json
+#   artifacts:
+#     reports:
+#       license_scanning: gl-license-scanning-report.json
+#   dependencies: []
+#   only:
+#     refs:
+#       - branches
+
+# # Read more about this feature here: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/
+# #
+# # Configure the scanning tool through the environment variables.
+# # List of the variables: https://gitlab.com/gitlab-org/security-products/dependency-scanning#settings
+# # How to set: https://docs.gitlab.com/ee/ci/yaml/#variables
+
+# # No compatible analyzer can be found
+
+# .auto-deploy:
+#   image: "registry.gitlab.com/gitlab-org/cluster-integration/auto-deploy-image:v0.12.1"
+
+# review:
+#   extends: .auto-deploy
+#   stage: review
+#   variables:
+#     ROLLOUT_RESOURCE_TYPE: deployment
+#     HELM_UPGRADE_EXTRA_ARGS: "--set image.repository=$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA"
+#   script:
+#     - auto-deploy check_kube_domain
+#     - auto-deploy download_chart
+#     - auto-deploy ensure_namespace
+#     - auto-deploy initialize_tiller
+#     - auto-deploy delete
+#     - auto-deploy create_secret
+#     - auto-deploy deploy
+#   environment:
+#     name: review/$CI_COMMIT_REF_NAME
+#     # url: http://$CI_PROJECT_ID-$CI_ENVIRONMENT_SLUG.$KUBE_INGRESS_BASE_DOMAIN
+#     on_stop: stop_review
+#   # artifacts:
+#   #   paths: [environment_url.txt]
+#   only:
+#     refs:
+#       - branches
+#       - tags
+#     kubernetes: active
+#   except:
+#     refs:
+#       - master
+#     variables:
+#       - $REVIEW_DISABLED
+
+# stop_review:
+#   extends: .auto-deploy
+#   stage: cleanup
+#   variables:
+#     GIT_STRATEGY: none
+#   script:
+#     - auto-deploy initialize_tiller
+#     - auto-deploy delete
+#   environment:
+#     name: review/$CI_COMMIT_REF_NAME
+#     action: stop
+#   dependencies: []
+#   when: manual
+#   allow_failure: true
+#   only:
+#     refs:
+#       - branches
+#       - tags
+#     kubernetes: active
+#   except:
+#     refs:
+#       - master
+#     variables:
+#       - $REVIEW_DISABLED
+
+# # Staging deploys are disabled by default since
+# # continuous deployment to production is enabled by default
+# # If you prefer to automatically deploy to staging and
+# # only manually promote to production, enable this job by setting
+# # STAGING_ENABLED.
+
+# staging:
+#   extends: .auto-deploy
+#   stage: staging
+#   variables:
+#     ROLLOUT_RESOURCE_TYPE: deployment
+#     HELM_UPGRADE_EXTRA_ARGS: "--set image.repository=$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA"
+#   script:
+#     - auto-deploy check_kube_domain
+#     - auto-deploy download_chart
+#     - auto-deploy ensure_namespace
+#     - auto-deploy initialize_tiller
+#     - auto-deploy create_secret
+#     - auto-deploy delete
+#     - auto-deploy deploy
+#   environment:
+#     name: staging
+#     # url: http://$CI_PROJECT_PATH_SLUG-staging.$KUBE_INGRESS_BASE_DOMAIN
+#   only:
+#     refs:
+#       - master
+#     kubernetes: active
+#     variables:
+#       - $STAGING_ENABLED
+
+# # Canaries are disabled by default, but if you want them,
+# # and know what the downsides are, you can enable this by setting
+# # CANARY_ENABLED.
+
+# canary:
+#   extends: .auto-deploy
+#   stage: canary
+#   variables:
+#     ROLLOUT_RESOURCE_TYPE: deployment
+#     HELM_UPGRADE_EXTRA_ARGS: "--set image.repository=$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA"
+#   script:
+#     - auto-deploy check_kube_domain
+#     - auto-deploy download_chart
+#     - auto-deploy ensure_namespace
+#     - auto-deploy initialize_tiller
+#     - auto-deploy create_secret
+#     - auto-deploy deploy canary
+#   environment:
+#     name: production
+#     # url: http://$CI_PROJECT_PATH_SLUG.$KUBE_INGRESS_BASE_DOMAIN
+#   when: manual
+#   only:
+#     refs:
+#       - master
+#     kubernetes: active
+
+# .production: &production_template
+#   extends: .auto-deploy
+#   stage: production
+#   variables:
+#     ROLLOUT_RESOURCE_TYPE: deployment
+#     HELM_UPGRADE_EXTRA_ARGS: "--set image.repository=$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA"
+#   script:
+#     - auto-deploy check_kube_domain
+#     - auto-deploy download_chart
+#     - auto-deploy ensure_namespace
+#     - auto-deploy initialize_tiller
+#     - auto-deploy delete
+#     - auto-deploy create_secret
+#     - auto-deploy deploy
+#     - auto-deploy delete canary
+#     - auto-deploy delete rollout
+#   environment:
+#     name: production
+#     # url: http://$CI_PROJECT_PATH_SLUG.$KUBE_INGRESS_BASE_DOMAIN
+#   # artifacts:
+#   #   paths: [environment_url.txt]
+
+# production:
+#   <<: *production_template
+#   only:
+#     refs:
+#       - master
+#     kubernetes: active
+#   except:
+#     variables:
+#       - $STAGING_ENABLED
+#       - $CANARY_ENABLED
+#       - $INCREMENTAL_ROLLOUT_ENABLED
+#       - $INCREMENTAL_ROLLOUT_MODE
+
+# production_manual:
+#   <<: *production_template
+#   when: manual
+#   allow_failure: false
+#   only:
+#     refs:
+#       - master
+#     kubernetes: active
+#     variables:
+#       - $STAGING_ENABLED
+#       - $CANARY_ENABLED
+#   except:
+#     variables:
+#       - $INCREMENTAL_ROLLOUT_ENABLED
+#       - $INCREMENTAL_ROLLOUT_MODE
+
+# # This job implements incremental rollout on for every push to `master`.
+
+# .rollout: &rollout_template
+#   extends: .auto-deploy
+#   script:
+#     - auto-deploy check_kube_domain
+#     - auto-deploy download_chart
+#     - auto-deploy ensure_namespace
+#     - auto-deploy initialize_tiller
+#     - auto-deploy create_secret
+#     - auto-deploy deploy rollout $ROLLOUT_PERCENTAGE
+#     - auto-deploy scale stable $((100-ROLLOUT_PERCENTAGE))
+#     - auto-deploy delete canary
+#   environment:
+#     name: production
+#     # url: http://$CI_PROJECT_PATH_SLUG.$KUBE_INGRESS_BASE_DOMAIN
+#   # artifacts:
+#   #   paths: [environment_url.txt]
+
+# .manual_rollout_template: &manual_rollout_template
+#   <<: *rollout_template
+#   stage: production
+#   when: manual
+#   # This selectors are backward compatible mode with $INCREMENTAL_ROLLOUT_ENABLED (before 11.4)
+#   only:
+#     refs:
+#       - master
+#     kubernetes: active
+#     variables:
+#       - $INCREMENTAL_ROLLOUT_MODE == "manual"
+#       - $INCREMENTAL_ROLLOUT_ENABLED
+#   except:
+#     variables:
+#       - $INCREMENTAL_ROLLOUT_MODE == "timed"
+
+# .timed_rollout_template: &timed_rollout_template
+#   <<: *rollout_template
+#   when: delayed
+#   start_in: 5 minutes
+#   only:
+#     refs:
+#       - master
+#     kubernetes: active
+#     variables:
+#       - $INCREMENTAL_ROLLOUT_MODE == "timed"
+
+# timed rollout 10%:
+#   <<: *timed_rollout_template
+#   stage: incremental rollout 10%
+#   variables:
+#     ROLLOUT_PERCENTAGE: 10
+
+# timed rollout 25%:
+#   <<: *timed_rollout_template
+#   stage: incremental rollout 25%
+#   variables:
+#     ROLLOUT_PERCENTAGE: 25
+
+# timed rollout 50%:
+#   <<: *timed_rollout_template
+#   stage: incremental rollout 50%
+#   variables:
+#     ROLLOUT_PERCENTAGE: 50
+
+# timed rollout 100%:
+#   <<: *timed_rollout_template
+#   <<: *production_template
+#   stage: incremental rollout 100%
+#   variables:
+#     ROLLOUT_PERCENTAGE: 100
+
+# rollout 10%:
+#   <<: *manual_rollout_template
+#   variables:
+#     ROLLOUT_PERCENTAGE: 10
+
+# rollout 25%:
+#   <<: *manual_rollout_template
+#   variables:
+#     ROLLOUT_PERCENTAGE: 25
+
+# rollout 50%:
+#   <<: *manual_rollout_template
+#   variables:
+#     ROLLOUT_PERCENTAGE: 50
+
+# rollout 100%:
+#   <<: *manual_rollout_template
+#   <<: *production_template
+#   allow_failure: false
+
+
+# include:
+#   # - template: Jobs/Build.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Build.gitlab-ci.yml
+#   # - template: Jobs/Test.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Test.gitlab-ci.yml
+#   # - template: Jobs/Code-Quality.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Code-Quality.gitlab-ci.yml
+#   # - template: Jobs/Deploy.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Deploy.gitlab-ci.yml
+#   # - template: Jobs/DAST-Default-Branch-Deploy.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/DAST-Default-Branch-Deploy.gitlab-ci.yml
+#   # - template: Jobs/Browser-Performance-Testing.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Browser-Performance-Testing.gitlab-ci.yml
+#   # - template: Security/DAST.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Security/DAST.gitlab-ci.yml
+#   # - template: Security/Container-Scanning.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Security/Container-Scanning.gitlab-ci.yml
+#   # - template: Security/Dependency-Scanning.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Security/Dependency-Scanning.gitlab-ci.yml
+#   # - template: Security/License-Management.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Security/License-Management.gitlab-ci.yml
+#   # - template: Security/SAST.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Security/SAST.gitlab-ci.yml
