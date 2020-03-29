@@ -70,8 +70,7 @@ local:
     script:
       - ls
       - cd test_with_postman
-      - newman run Persons.postman_collection.json -e 'people local.postman_environment.json' \
-        --reporters cli,html --reporter-html-export report.html
+      - newman run Persons.postman_collection.json -e 'people local.postman_environment.json' --reporters cli,html --reporter-html-export report.html
       - ls
     artifacts:
       paths:
