@@ -74,7 +74,7 @@ local:
       - ls
     artifacts:
       paths:
-        - report.html
+        - test_with_postman/report.html
     only:
       - tags
       - branches
