@@ -1,4 +1,5 @@
 *.env
+*.html
 
 node_modules/
 dist/

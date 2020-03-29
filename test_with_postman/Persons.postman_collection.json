@@ -6,7 +6,7 @@
 	},
 	"item": [
 		{
-			"name": "CRUD",
+			"name": "Unit Test",
 			"item": [
 				{
 					"name": "Create",
@@ -19,7 +19,10 @@
 									"tests[\"Status code is 201\"] = responseCode.code === 201;",
 									"var jsonData = JSON.parse(responseBody);",
 									"",
-									"console.log(jsonData);"
+									"console.log(jsonData);",
+									"",
+									"var id_user = jsonData.id;",
+									"pm.variables.set(\"id_user\", id_user);"
 								],
 								"type": "text/javascript"
 							}
@@ -29,34 +32,13 @@
 						"method": "POST",
 						"header": [],
 						"body": {
-							"mode": "urlencoded",
-							"urlencoded": [
-								{
-									"key": "rut",
-									"value": "17610555-0",
-									"type": "text"
-								},
-								{
-									"key": "name",
-									"value": "antonio",
-									"type": "text"
-								},
-								{
-									"key": "lastname",
-									"value": "cayulao",
-									"type": "text"
-								},
-								{
-									"key": "age",
-									"value": "29",
-									"type": "text"
-								},
-								{
-									"key": "course",
-									"value": "applicant",
-									"type": "text"
+							"mode": "raw",
+							"raw": "{\n\t\"rut\": \"17610555-0\",\n\t\"name\": \"antonio\",\n\t\"lastname\": \"cayulao\",\n\t\"age\": 29,\n\t\"course\": \"applicant\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
 								}
-							]
+							}
 						},
 						"url": {
 							"raw": "{{protocol}}://{{host}}/people",
@@ -86,6 +68,16 @@
 								],
 								"type": "text/javascript"
 							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "d0188a12-bafd-41f6-92ec-4ececa7086f0",
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
 						}
 					],
 					"request": {
@@ -104,7 +96,7 @@
 							"variable": [
 								{
 									"key": "id",
-									"value": "1"
+									"value": "{{id_user}}"
 								}
 							]
 						}
@@ -119,10 +111,18 @@
 							"script": {
 								"id": "7a767da7-e01f-4e5a-a00b-bee84f2a6977",
 								"exec": [
-									"tests[\"Status code is 200\"] = responseCode.code === 200;",
-									"var jsonData = JSON.parse(responseBody);",
-									"",
-									"console.log(jsonData);"
+									"tests[\"Status code is 204\"] = responseCode.code === 204;",
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "554ef41e-9538-406e-8237-e794913c1878",
+								"exec": [
+									""
 								],
 								"type": "text/javascript"
 							}
@@ -132,38 +132,13 @@
 						"method": "PUT",
 						"header": [],
 						"body": {
-							"mode": "urlencoded",
-							"urlencoded": [
-								{
-									"key": "rut",
-									"value": "17610555-0",
-									"type": "text",
-									"disabled": true
-								},
-								{
-									"key": "name",
-									"value": "antonio",
-									"type": "text",
-									"disabled": true
-								},
-								{
-									"key": "lastname",
-									"value": "cayulao",
-									"type": "text",
-									"disabled": true
-								},
-								{
-									"key": "age",
-									"value": "29",
-									"type": "text",
-									"disabled": true
-								},
-								{
-									"key": "course",
-									"value": "fired",
-									"type": "text"
+							"mode": "raw",
+							"raw": "{\n\t\"course\": \"fired\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
 								}
-							]
+							}
 						},
 						"url": {
 							"raw": "{{protocol}}://{{host}}/people/:id",
@@ -178,7 +153,7 @@
 							"variable": [
 								{
 									"key": "id",
-									"value": "1"
+									"value": "{{id_user}}"
 								}
 							]
 						}
@@ -193,10 +168,18 @@
 							"script": {
 								"id": "300c08ce-749e-4dec-97e7-87d80b1fe41e",
 								"exec": [
-									"tests[\"Status code is 201\"] = responseCode.code === 200;",
-									"var jsonData = JSON.parse(responseBody);",
-									"",
-									"console.log(jsonData);"
+									"tests[\"Status code is 200\"] = responseCode.code === 200;",
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"id": "d310fe6c-28b5-41f5-8873-c561d277767c",
+								"exec": [
+									""
 								],
 								"type": "text/javascript"
 							}
@@ -218,7 +201,7 @@
 							"variable": [
 								{
 									"key": "id",
-									"value": ""
+									"value": "{{id_user}}"
 								}
 							]
 						}
@@ -257,11 +240,6 @@
 					"response": []
 				}
 			],
-			"protocolProfileBehavior": {}
-		},
-		{
-			"name": "Unit Test",
-			"item": [],
 			"protocolProfileBehavior": {}
 		}
 	],
