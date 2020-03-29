@@ -126,7 +126,7 @@ build:
         echo 'Activating Docker BuildKit to forward CI variables with --secret'
         export DOCKER_BUILDKIT=1
       fi
-    - docker pull registry.gitlab.com/acayulao/service-backend-persons
+    - docker pull registry.gitlab.com/acayulao/service-backend-persons/master
     - |
       docker build \
         $build_secret_args \
@@ -140,7 +140,7 @@ build:
         --build-arg NO_PROXY="$NO_PROXY" \
         --build-arg no_proxy="$no_proxy" \
         $AUTO_DEVOPS_BUILD_IMAGE_EXTRA_ARGS \
-        --cache-from registry.gitlab.com/acayulao/service-backend-persons \
+        --cache-from registry.gitlab.com/acayulao/service-backend-persons/master \
         --tag "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG" .
     - docker tag "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG" "$CI_APPLICATION_REPOSITORY"
     - docker push "$CI_APPLICATION_REPOSITORY"
@@ -210,264 +210,295 @@ license_scanning:
 # List of the variables: https://gitlab.com/gitlab-org/security-products/dependency-scanning#settings
 # How to set: https://docs.gitlab.com/ee/ci/yaml/#variables
 
-# No compatible analyzer can be found
+code_quality:
+  stage: test
+  image: docker:19.03.5
+  allow_failure: true
+  services:
+    - docker:19.03.5-dind
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+    CODE_QUALITY_IMAGE: "registry.gitlab.com/gitlab-org/ci-cd/codequality:0.85.9"
+  script:
+    - |
+      if ! docker info &>/dev/null; then
+        if [ -z "$DOCKER_HOST" -a "$KUBERNETES_PORT" ]; then
+          export DOCKER_HOST='tcp://localhost:2375'
+        fi
+      fi
+    - docker pull --quiet "$CODE_QUALITY_IMAGE"
+    - docker run
+        --env SOURCE_CODE="$PWD"
+        --volume "$PWD":/code
+        --volume /var/run/docker.sock:/var/run/docker.sock
+        "$CODE_QUALITY_IMAGE" /code
+  artifacts:
+    reports:
+      codequality: gl-code-quality-report.json
+    expire_in: 1 week
+  dependencies: []
+  only:
+    refs:
+      - branches
+      - tags
 
-# .auto-deploy:
-#   image: "registry.gitlab.com/gitlab-org/cluster-integration/auto-deploy-image:v0.12.1"
+.auto-deploy:
+  image: "registry.gitlab.com/gitlab-org/cluster-integration/auto-deploy-image:v0.12.1"
 
-# review:
-#   extends: .auto-deploy
-#   stage: review
-#   variables:
-#     ROLLOUT_RESOURCE_TYPE: deployment
-#     HELM_UPGRADE_EXTRA_ARGS: "--set image.repository=$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA"
-#   script:
-#     - auto-deploy check_kube_domain
-#     - auto-deploy download_chart
-#     - auto-deploy ensure_namespace
-#     - auto-deploy initialize_tiller
-#     - auto-deploy delete
-#     - auto-deploy create_secret
-#     - auto-deploy deploy
-#   environment:
-#     name: review/$CI_COMMIT_REF_NAME
-#     # url: http://$CI_PROJECT_ID-$CI_ENVIRONMENT_SLUG.$KUBE_INGRESS_BASE_DOMAIN
-#     on_stop: stop_review
-#   # artifacts:
-#   #   paths: [environment_url.txt]
-#   only:
-#     refs:
-#       - branches
-#       - tags
-#     kubernetes: active
-#   except:
-#     refs:
-#       - master
-#     variables:
-#       - $REVIEW_DISABLED
+review:
+  extends: .auto-deploy
+  stage: review
+  variables:
+    ROLLOUT_RESOURCE_TYPE: deployment
+    HELM_UPGRADE_EXTRA_ARGS: "--set image.repository=$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA"
+  script:
+    - auto-deploy check_kube_domain
+    - auto-deploy download_chart
+    - auto-deploy ensure_namespace
+    - auto-deploy initialize_tiller
+    - auto-deploy delete
+    - auto-deploy create_secret
+    - auto-deploy deploy
+  environment:
+    name: review/$CI_COMMIT_REF_NAME
+    # url: http://$CI_PROJECT_ID-$CI_ENVIRONMENT_SLUG.$KUBE_INGRESS_BASE_DOMAIN
+    on_stop: stop_review
+  # artifacts:
+  #   paths: [environment_url.txt]
+  only:
+    refs:
+      - branches
+      - tags
+    kubernetes: active
+  except:
+    refs:
+      - master
+    variables:
+      - $REVIEW_DISABLED
 
-# stop_review:
-#   extends: .auto-deploy
-#   stage: cleanup
-#   variables:
-#     GIT_STRATEGY: none
-#   script:
-#     - auto-deploy initialize_tiller
-#     - auto-deploy delete
-#   environment:
-#     name: review/$CI_COMMIT_REF_NAME
-#     action: stop
-#   dependencies: []
-#   when: manual
-#   allow_failure: true
-#   only:
-#     refs:
-#       - branches
-#       - tags
-#     kubernetes: active
-#   except:
-#     refs:
-#       - master
-#     variables:
-#       - $REVIEW_DISABLED
+stop_review:
+  extends: .auto-deploy
+  stage: cleanup
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - auto-deploy initialize_tiller
+    - auto-deploy delete
+  environment:
+    name: review/$CI_COMMIT_REF_NAME
+    action: stop
+  dependencies: []
+  when: manual
+  allow_failure: true
+  only:
+    refs:
+      - branches
+      - tags
+    kubernetes: active
+  except:
+    refs:
+      - master
+    variables:
+      - $REVIEW_DISABLED
 
-# # Staging deploys are disabled by default since
-# # continuous deployment to production is enabled by default
-# # If you prefer to automatically deploy to staging and
-# # only manually promote to production, enable this job by setting
-# # STAGING_ENABLED.
+# Staging deploys are disabled by default since
+# continuous deployment to production is enabled by default
+# If you prefer to automatically deploy to staging and
+# only manually promote to production, enable this job by setting
+# STAGING_ENABLED.
 
-# staging:
-#   extends: .auto-deploy
-#   stage: staging
-#   variables:
-#     ROLLOUT_RESOURCE_TYPE: deployment
-#     HELM_UPGRADE_EXTRA_ARGS: "--set image.repository=$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA"
-#   script:
-#     - auto-deploy check_kube_domain
-#     - auto-deploy download_chart
-#     - auto-deploy ensure_namespace
-#     - auto-deploy initialize_tiller
-#     - auto-deploy create_secret
-#     - auto-deploy delete
-#     - auto-deploy deploy
-#   environment:
-#     name: staging
-#     # url: http://$CI_PROJECT_PATH_SLUG-staging.$KUBE_INGRESS_BASE_DOMAIN
-#   only:
-#     refs:
-#       - master
-#     kubernetes: active
-#     variables:
-#       - $STAGING_ENABLED
+staging:
+  extends: .auto-deploy
+  stage: staging
+  variables:
+    ROLLOUT_RESOURCE_TYPE: deployment
+    HELM_UPGRADE_EXTRA_ARGS: "--set image.repository=$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA"
+  script:
+    - auto-deploy check_kube_domain
+    - auto-deploy download_chart
+    - auto-deploy ensure_namespace
+    - auto-deploy initialize_tiller
+    - auto-deploy create_secret
+    - auto-deploy delete
+    - auto-deploy deploy
+  environment:
+    name: staging
+    # url: http://$CI_PROJECT_PATH_SLUG-staging.$KUBE_INGRESS_BASE_DOMAIN
+  only:
+    refs:
+      - master
+    kubernetes: active
+    variables:
+      - $STAGING_ENABLED
 
-# # Canaries are disabled by default, but if you want them,
-# # and know what the downsides are, you can enable this by setting
-# # CANARY_ENABLED.
+# Canaries are disabled by default, but if you want them,
+# and know what the downsides are, you can enable this by setting
+# CANARY_ENABLED.
 
-# canary:
-#   extends: .auto-deploy
-#   stage: canary
-#   variables:
-#     ROLLOUT_RESOURCE_TYPE: deployment
-#     HELM_UPGRADE_EXTRA_ARGS: "--set image.repository=$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA"
-#   script:
-#     - auto-deploy check_kube_domain
-#     - auto-deploy download_chart
-#     - auto-deploy ensure_namespace
-#     - auto-deploy initialize_tiller
-#     - auto-deploy create_secret
-#     - auto-deploy deploy canary
-#   environment:
-#     name: production
-#     # url: http://$CI_PROJECT_PATH_SLUG.$KUBE_INGRESS_BASE_DOMAIN
-#   when: manual
-#   only:
-#     refs:
-#       - master
-#     kubernetes: active
+canary:
+  extends: .auto-deploy
+  stage: canary
+  variables:
+    ROLLOUT_RESOURCE_TYPE: deployment
+    HELM_UPGRADE_EXTRA_ARGS: "--set image.repository=$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA"
+  script:
+    - auto-deploy check_kube_domain
+    - auto-deploy download_chart
+    - auto-deploy ensure_namespace
+    - auto-deploy initialize_tiller
+    - auto-deploy create_secret
+    - auto-deploy deploy canary
+  environment:
+    name: production
+    # url: http://$CI_PROJECT_PATH_SLUG.$KUBE_INGRESS_BASE_DOMAIN
+  when: manual
+  only:
+    refs:
+      - master
+    kubernetes: active
 
-# .production: &production_template
-#   extends: .auto-deploy
-#   stage: production
-#   variables:
-#     ROLLOUT_RESOURCE_TYPE: deployment
-#     HELM_UPGRADE_EXTRA_ARGS: "--set image.repository=$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA"
-#   script:
-#     - auto-deploy check_kube_domain
-#     - auto-deploy download_chart
-#     - auto-deploy ensure_namespace
-#     - auto-deploy initialize_tiller
-#     - auto-deploy delete
-#     - auto-deploy create_secret
-#     - auto-deploy deploy
-#     - auto-deploy delete canary
-#     - auto-deploy delete rollout
-#   environment:
-#     name: production
-#     # url: http://$CI_PROJECT_PATH_SLUG.$KUBE_INGRESS_BASE_DOMAIN
-#   # artifacts:
-#   #   paths: [environment_url.txt]
+.production: &production_template
+  extends: .auto-deploy
+  stage: production
+  variables:
+    ROLLOUT_RESOURCE_TYPE: deployment
+    HELM_UPGRADE_EXTRA_ARGS: "--set image.repository=$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA"
+  script:
+    - auto-deploy check_kube_domain
+    - auto-deploy download_chart
+    - auto-deploy ensure_namespace
+    - auto-deploy initialize_tiller
+    - auto-deploy delete
+    - auto-deploy create_secret
+    - auto-deploy deploy
+    - auto-deploy delete canary
+    - auto-deploy delete rollout
+  environment:
+    name: production
+    # url: http://$CI_PROJECT_PATH_SLUG.$KUBE_INGRESS_BASE_DOMAIN
+  # artifacts:
+  #   paths: [environment_url.txt]
 
-# production:
-#   <<: *production_template
-#   only:
-#     refs:
-#       - master
-#     kubernetes: active
-#   except:
-#     variables:
-#       - $STAGING_ENABLED
-#       - $CANARY_ENABLED
-#       - $INCREMENTAL_ROLLOUT_ENABLED
-#       - $INCREMENTAL_ROLLOUT_MODE
+production:
+  <<: *production_template
+  only:
+    refs:
+      - master
+    kubernetes: active
+  except:
+    variables:
+      - $STAGING_ENABLED
+      - $CANARY_ENABLED
+      - $INCREMENTAL_ROLLOUT_ENABLED
+      - $INCREMENTAL_ROLLOUT_MODE
 
-# production_manual:
-#   <<: *production_template
-#   when: manual
-#   allow_failure: false
-#   only:
-#     refs:
-#       - master
-#     kubernetes: active
-#     variables:
-#       - $STAGING_ENABLED
-#       - $CANARY_ENABLED
-#   except:
-#     variables:
-#       - $INCREMENTAL_ROLLOUT_ENABLED
-#       - $INCREMENTAL_ROLLOUT_MODE
+production_manual:
+  <<: *production_template
+  when: manual
+  allow_failure: false
+  only:
+    refs:
+      - master
+    kubernetes: active
+    variables:
+      - $STAGING_ENABLED
+      - $CANARY_ENABLED
+  except:
+    variables:
+      - $INCREMENTAL_ROLLOUT_ENABLED
+      - $INCREMENTAL_ROLLOUT_MODE
 
-# # This job implements incremental rollout on for every push to `master`.
+# This job implements incremental rollout on for every push to `master`.
 
-# .rollout: &rollout_template
-#   extends: .auto-deploy
-#   script:
-#     - auto-deploy check_kube_domain
-#     - auto-deploy download_chart
-#     - auto-deploy ensure_namespace
-#     - auto-deploy initialize_tiller
-#     - auto-deploy create_secret
-#     - auto-deploy deploy rollout $ROLLOUT_PERCENTAGE
-#     - auto-deploy scale stable $((100-ROLLOUT_PERCENTAGE))
-#     - auto-deploy delete canary
-#   environment:
-#     name: production
-#     # url: http://$CI_PROJECT_PATH_SLUG.$KUBE_INGRESS_BASE_DOMAIN
-#   # artifacts:
-#   #   paths: [environment_url.txt]
+.rollout: &rollout_template
+  extends: .auto-deploy
+  script:
+    - auto-deploy check_kube_domain
+    - auto-deploy download_chart
+    - auto-deploy ensure_namespace
+    - auto-deploy initialize_tiller
+    - auto-deploy create_secret
+    - auto-deploy deploy rollout $ROLLOUT_PERCENTAGE
+    - auto-deploy scale stable $((100-ROLLOUT_PERCENTAGE))
+    - auto-deploy delete canary
+  environment:
+    name: production
+    # url: http://$CI_PROJECT_PATH_SLUG.$KUBE_INGRESS_BASE_DOMAIN
+  # artifacts:
+  #   paths: [environment_url.txt]
 
-# .manual_rollout_template: &manual_rollout_template
-#   <<: *rollout_template
-#   stage: production
-#   when: manual
-#   # This selectors are backward compatible mode with $INCREMENTAL_ROLLOUT_ENABLED (before 11.4)
-#   only:
-#     refs:
-#       - master
-#     kubernetes: active
-#     variables:
-#       - $INCREMENTAL_ROLLOUT_MODE == "manual"
-#       - $INCREMENTAL_ROLLOUT_ENABLED
-#   except:
-#     variables:
-#       - $INCREMENTAL_ROLLOUT_MODE == "timed"
+.manual_rollout_template: &manual_rollout_template
+  <<: *rollout_template
+  stage: production
+  when: manual
+  # This selectors are backward compatible mode with $INCREMENTAL_ROLLOUT_ENABLED (before 11.4)
+  only:
+    refs:
+      - master
+    kubernetes: active
+    variables:
+      - $INCREMENTAL_ROLLOUT_MODE == "manual"
+      - $INCREMENTAL_ROLLOUT_ENABLED
+  except:
+    variables:
+      - $INCREMENTAL_ROLLOUT_MODE == "timed"
 
-# .timed_rollout_template: &timed_rollout_template
-#   <<: *rollout_template
-#   when: delayed
-#   start_in: 5 minutes
-#   only:
-#     refs:
-#       - master
-#     kubernetes: active
-#     variables:
-#       - $INCREMENTAL_ROLLOUT_MODE == "timed"
+.timed_rollout_template: &timed_rollout_template
+  <<: *rollout_template
+  when: delayed
+  start_in: 5 minutes
+  only:
+    refs:
+      - master
+    kubernetes: active
+    variables:
+      - $INCREMENTAL_ROLLOUT_MODE == "timed"
 
-# timed rollout 10%:
-#   <<: *timed_rollout_template
-#   stage: incremental rollout 10%
-#   variables:
-#     ROLLOUT_PERCENTAGE: 10
+timed rollout 10%:
+  <<: *timed_rollout_template
+  stage: incremental rollout 10%
+  variables:
+    ROLLOUT_PERCENTAGE: 10
 
-# timed rollout 25%:
-#   <<: *timed_rollout_template
-#   stage: incremental rollout 25%
-#   variables:
-#     ROLLOUT_PERCENTAGE: 25
+timed rollout 25%:
+  <<: *timed_rollout_template
+  stage: incremental rollout 25%
+  variables:
+    ROLLOUT_PERCENTAGE: 25
 
-# timed rollout 50%:
-#   <<: *timed_rollout_template
-#   stage: incremental rollout 50%
-#   variables:
-#     ROLLOUT_PERCENTAGE: 50
+timed rollout 50%:
+  <<: *timed_rollout_template
+  stage: incremental rollout 50%
+  variables:
+    ROLLOUT_PERCENTAGE: 50
 
-# timed rollout 100%:
-#   <<: *timed_rollout_template
-#   <<: *production_template
-#   stage: incremental rollout 100%
-#   variables:
-#     ROLLOUT_PERCENTAGE: 100
+timed rollout 100%:
+  <<: *timed_rollout_template
+  <<: *production_template
+  stage: incremental rollout 100%
+  variables:
+    ROLLOUT_PERCENTAGE: 100
 
-# rollout 10%:
-#   <<: *manual_rollout_template
-#   variables:
-#     ROLLOUT_PERCENTAGE: 10
+rollout 10%:
+  <<: *manual_rollout_template
+  variables:
+    ROLLOUT_PERCENTAGE: 10
 
-# rollout 25%:
-#   <<: *manual_rollout_template
-#   variables:
-#     ROLLOUT_PERCENTAGE: 25
+rollout 25%:
+  <<: *manual_rollout_template
+  variables:
+    ROLLOUT_PERCENTAGE: 25
 
-# rollout 50%:
-#   <<: *manual_rollout_template
-#   variables:
-#     ROLLOUT_PERCENTAGE: 50
+rollout 50%:
+  <<: *manual_rollout_template
+  variables:
+    ROLLOUT_PERCENTAGE: 50
 
-# rollout 100%:
-#   <<: *manual_rollout_template
-#   <<: *production_template
-#   allow_failure: false
+rollout 100%:
+  <<: *manual_rollout_template
+  <<: *production_template
+  allow_failure: false
 
 
 # include:
