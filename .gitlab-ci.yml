@@ -50,36 +50,36 @@ variables:
   CANARY_ENABLED: 1
 
 stages:
-    - pretest
-    - build
-    - test
-#   - deploy  # dummy stage to follow the template guidelines
-#   - review
-#   - dast
-#   - staging
-#   - canary
-#   - production
-#   - incremental rollout 10%
-#   - incremental rollout 25%
-#   - incremental rollout 50%
-#   - incremental rollout 100%
-#   - cleanup
+  - pretest
+  - build
+  - test
+  - deploy  # dummy stage to follow the template guidelines
+  - review
+  - dast
+  - staging
+  - canary
+  - production
+  - incremental rollout 10%
+  - incremental rollout 25%
+  - incremental rollout 50%
+  - incremental rollout 100%
+  - cleanup
 
 local:
-    stage: pretest
-    script:
-      - ls
-      - cd test_with_postman
-      - newman run Persons.postman_collection.json -e 'people local.postman_environment.json' --reporters cli,html --reporter-html-export report.html
-      - ls
-    artifacts:
-      paths:
-        - test_with_postman/report.html
-    only:
-      - tags
-      - branches
-    tags:
-      - local
+  stage: pretest
+  script:
+    - ls
+    - cd test_with_postman
+    - newman run Persons.postman_collection.json -e 'people local.postman_environment.json' --reporters cli,html --reporter-html-export report.html
+    - ls
+  artifacts:
+    paths:
+      - test_with_postman/report.html
+  only:
+    - tags
+    - branches
+  tags:
+    - local
 
 build:
   stage: build
@@ -127,7 +127,6 @@ build:
         export DOCKER_BUILDKIT=1
       fi
     - docker pull registry.gitlab.com/acayulao/service-backend-persons
-    # - docker pull "$CI_APPLICATION_REPOSITORY"
     - |
       docker build \
         $build_secret_args \
@@ -148,7 +147,7 @@ build:
     - echo "$CI_APPLICATION_REPOSITORY:$CI_APPLICATION_TAG"
 
 
-# # Read more about this feature here: https://docs.gitlab.com/ee/user/application_security/container_scanning/
+# Read more about this feature here: https://docs.gitlab.com/ee/user/application_security/container_scanning/
 container_scanning:
   stage: test
   image:
@@ -180,14 +179,11 @@ container_scanning:
   dependencies: []
 
 
-# # Read more about this feature here: https://docs.gitlab.com/ee/user/application_security/license_compliance/
-# #
-# # Configure the scanning tool through the environment variables.
-# # List of the variables: https://gitlab.com/gitlab-org/security-products/license-management#settings
-# # How to set: https://docs.gitlab.com/ee/ci/yaml/#variables
-
-# variables:
-#   LICENSE_MANAGEMENT_SETUP_CMD: ''  # If needed, specify a command to setup your environment with a custom package manager.
+# Read more about this feature here: https://docs.gitlab.com/ee/user/application_security/license_compliance/
+#
+# Configure the scanning tool through the environment variables.
+# List of the variables: https://gitlab.com/gitlab-org/security-products/license-management#settings
+# How to set: https://docs.gitlab.com/ee/ci/yaml/#variables
 
 license_scanning:
   stage: test
@@ -195,6 +191,7 @@ license_scanning:
     name: "registry.gitlab.com/gitlab-org/security-products/license-management:$CI_SERVER_VERSION_MAJOR-$CI_SERVER_VERSION_MINOR-stable"
     entrypoint: [""]
   variables:
+    LICENSE_MANAGEMENT_SETUP_CMD: ''
     SETUP_CMD: $LICENSE_MANAGEMENT_SETUP_CMD
   allow_failure: true
   script:
@@ -210,13 +207,13 @@ license_scanning:
     refs:
       - branches
 
-# # Read more about this feature here: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/
-# #
-# # Configure the scanning tool through the environment variables.
-# # List of the variables: https://gitlab.com/gitlab-org/security-products/dependency-scanning#settings
-# # How to set: https://docs.gitlab.com/ee/ci/yaml/#variables
+# Read more about this feature here: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/
+#
+# Configure the scanning tool through the environment variables.
+# List of the variables: https://gitlab.com/gitlab-org/security-products/dependency-scanning#settings
+# How to set: https://docs.gitlab.com/ee/ci/yaml/#variables
 
-# # No compatible analyzer can be found
+# No compatible analyzer can be found
 
 # .auto-deploy:
 #   image: "registry.gitlab.com/gitlab-org/cluster-integration/auto-deploy-image:v0.12.1"
@@ -479,7 +476,7 @@ license_scanning:
 # include:
 #   # - template: Jobs/Build.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Build.gitlab-ci.yml
 #   # - template: Jobs/Test.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Test.gitlab-ci.yml
-  - template: Jobs/Code-Quality.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Code-Quality.gitlab-ci.yml
+  # - template: Jobs/Code-Quality.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Code-Quality.gitlab-ci.yml
 #   # - template: Jobs/Deploy.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Deploy.gitlab-ci.yml
 #   # - template: Jobs/DAST-Default-Branch-Deploy.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/DAST-Default-Branch-Deploy.gitlab-ci.yml
 #   # - template: Jobs/Browser-Performance-Testing.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Jobs/Browser-Performance-Testing.gitlab-ci.yml
@@ -487,4 +484,4 @@ license_scanning:
 #   # - template: Security/Container-Scanning.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Security/Container-Scanning.gitlab-ci.yml
 #   # - template: Security/Dependency-Scanning.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Security/Dependency-Scanning.gitlab-ci.yml
 #   # - template: Security/License-Management.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Security/License-Management.gitlab-ci.yml
-  - template: Security/SAST.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Security/SAST.gitlab-ci.yml
+  # - template: Security/SAST.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab-foss/blob/master/lib/gitlab/ci/templates/Security/SAST.gitlab-ci.yml
