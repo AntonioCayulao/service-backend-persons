@@ -7,4 +7,4 @@ module.exports = app => {
 
     // middlewares
     app.use(express.json());
-}
+};
