@@ -11,7 +11,6 @@ module.exports = app => {
                 });      
         })
         .post((req,res) => {
-            console.log(req);
             People.create(req.body)
                 .then(result => res.status(201).json(result))
                 .catch(error => {
