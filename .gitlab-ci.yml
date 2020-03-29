@@ -315,7 +315,7 @@ staging:
     ROLLOUT_RESOURCE_TYPE: deployment
     HELM_UPGRADE_EXTRA_ARGS: "--set image.repository=$CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:$CI_COMMIT_SHA"
   script:
-    - auto-deploy check_kube_domain
+    # - auto-deploy check_kube_domain
     - auto-deploy download_chart
     - auto-deploy ensure_namespace
     - auto-deploy initialize_tiller
