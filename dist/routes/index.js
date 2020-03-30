@@ -2,7 +2,7 @@
 
 module.exports = function (app) {
   app.get('/', function (req, res) {
-    msg = {
+    var msg = {
       service: 'People API',
       status: 'ok'
     };
