@@ -1,6 +1,6 @@
 .gitlab/
 dev_local/
-dist/
+src/
 node_modules/
 
 .dockerignore
