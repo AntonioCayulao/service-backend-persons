@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "service-backend-persons.fullname" . }}
+  name: {{ .Release.Name }}-svc
   labels:
     {{- include "service-backend-persons.labels" . | nindent 4 }}
 spec:

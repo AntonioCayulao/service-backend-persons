@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "service-backend-persons.fullname" . }}
+  name: {{ .Release.Name }}
   labels:
     {{- include "service-backend-persons.labels" . | nindent 4 }}
 spec:
@@ -14,10 +14,8 @@ spec:
       labels:
         {{- include "service-backend-persons.selectorLabels" . | nindent 8 }}
     spec:
-    {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
-    {{- end }}
+        - name: gitlab-registry-acayulao-service-backend-persons
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}"
