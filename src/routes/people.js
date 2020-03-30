@@ -7,7 +7,7 @@ module.exports = app => {
             People.findAll({})
                 .then(result => res.json(result))
                 .catch(error => {
-                    res.status(404).json({msg: error.message});
+                    res.status(404);
                 });      
         })
         .post((req,res) => {
@@ -20,23 +20,41 @@ module.exports = app => {
     app.route('/people/:id')
         .get((req,res) => {
             People.findOne({where: req.params})
-                .then(result => res.json(result))
+                .then(result => {
+                    if (result == null){
+                        res.status(404).send('Not found');
+                    }else{
+                        res.json(result)
+                    }
+                })
                 .catch(error => {
-                    res.status(404).json({msg: error.message});
+                    res.status(404);
                 });
         })
         .put((req,res) => {
             People.update(req.body, {where: req.params})
-                .then(result => res.sendStatus(204))
+                .then(result => {
+                    if (result[0] == 0){
+                        res.status(404).send('Not found');
+                    }else{
+                        res.sendStatus(200);
+                    }
+                })
                 .catch(error => {
-                    res.status(412).json({msg: error.message});
+                    res.status(404);
                 });
         })
         .delete((req,res) => {
             People.destroy({where: req.params})
-                .then(result => res.sendStatus(200))
+                .then(result => {
+                    if (result == 0){
+                        res.status(404).send('Not found');
+                    }else{
+                        res.sendStatus(200);
+                    }
+                })
                 .catch(error => {
-                    res.status(404).json({msg: error.message});
+                    res.status(404);
                 });
         });
 };

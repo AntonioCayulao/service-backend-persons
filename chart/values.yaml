@@ -24,7 +24,7 @@ podSecurityContext: {}
   # runAsUser: 1000
 
 service:
-  type: LoadBalancer
+  type: NodePort
   port: 80
 
 resources: {}
